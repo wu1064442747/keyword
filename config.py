@@ -151,10 +151,15 @@ TRENDS_CONFIG = {
 # Rate Limiting Configuration
 RATE_LIMIT_CONFIG = {
     'max_retries': 3,
+    'per_keyword_max_retries': 3,
     'min_delay_between_queries': 10,  # 最小延迟10秒
     'max_delay_between_queries': 20,  # 最大延迟20秒
     'batch_size': 5,  # 每批处理的关键词数量
     'batch_interval': 60,  # 批次间隔时间（秒）
+    'quota_retry_min_wait': 90,  # API 配额超限后的最小等待时间（秒）
+    'quota_retry_max_wait': 180,  # API 配额超限后的最大等待时间（秒）
+    'empty_response_min_wait': 30,  # 空响应后的最小等待时间（秒）
+    'empty_response_max_wait': 60,  # 空响应后的最大等待时间（秒）
 }
 
 # Schedule Configuration

@@ -7,12 +7,15 @@ from datetime import datetime
 import requests
 from urllib.parse import quote
 import re
+from config import RATE_LIMIT_CONFIG
 
 def get_related_queries(keyword, geo='', timeframe='today 12-m'):
     """
-    获取关键词的相关查询数据，带请求限制
+    获取关键词的相关查询数据，带请求限制和有限重试
     """
-    while True:  # 添加无限重试循环
+    max_retries = RATE_LIMIT_CONFIG['per_keyword_max_retries']
+
+    for attempt in range(1, max_retries + 1):
         tr = Trends(hl='zh-CN')
         
         # 随机化 User-Agent
@@ -50,24 +53,39 @@ def get_related_queries(keyword, geo='', timeframe='today 12-m'):
             
         except Exception as e:
             error_msg = str(e)
-            print(f"尝试获取数据时出错: {error_msg}")
+            print(f"尝试获取数据时出错（第 {attempt}/{max_retries} 次）: {error_msg}")
             
+            wait_time = None
+            reason = None
+
             # 如果是配额超限错误，等待后重试
             if "API quota exceeded" in error_msg:
-                wait_time = random.uniform(300, 360)  # 等待5-6分钟
-                print(f"API配额超限，等待 {wait_time:.1f} 秒后重试...")
-                time.sleep(wait_time)
-                continue  # 继续下一次重试
+                wait_time = random.uniform(
+                    RATE_LIMIT_CONFIG['quota_retry_min_wait'],
+                    RATE_LIMIT_CONFIG['quota_retry_max_wait']
+                )
+                reason = "API配额超限"
             
             # 如果是NoneType错误，也等待后重试
-            if "'NoneType' object has no attribute 'raise_for_status'" in error_msg:
-                wait_time = random.uniform(60, 120)  # 等待1-2分钟
-                print(f"请求返回为空，等待 {wait_time:.1f} 秒后重试...")
-                time.sleep(wait_time)
-                continue  # 继续下一次重试
+            elif "'NoneType' object has no attribute 'raise_for_status'" in error_msg:
+                wait_time = random.uniform(
+                    RATE_LIMIT_CONFIG['empty_response_min_wait'],
+                    RATE_LIMIT_CONFIG['empty_response_max_wait']
+                )
+                reason = "请求返回为空"
                 
             # 其他错误则直接抛出
-            raise
+            else:
+                raise
+
+            if attempt >= max_retries:
+                print(f"{reason}，已达到最大重试次数 {max_retries}，跳过关键词: {keyword}")
+                return None
+
+            print(f"{reason}，等待 {wait_time:.1f} 秒后重试...")
+            time.sleep(wait_time)
+
+    return None
 
 def batch_get_queries(keywords, geo='', timeframe='today 12-m', delay_between_queries=5):
     """
@@ -79,6 +97,8 @@ def batch_get_queries(keywords, geo='', timeframe='today 12-m', delay_between_qu
         try:
             print(f"\n正在查询关键词: {keyword}")
             results[keyword] = get_related_queries(keyword, geo, timeframe)
+            if results[keyword] is None:
+                print(f"跳过关键词: {keyword}")
             
             # 在请求之间添加延时
             if keyword != keywords[-1]:  # 如果不是最后一个关键词
