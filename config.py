@@ -8,6 +8,9 @@ load_dotenv()
 NOTIFICATION_CONFIG = {
     'method': 'email',  # 可选值: 'email', 'wechat', 'both'
     'wechat_receiver': os.getenv('TRENDS_WECHAT_RECEIVER', ''),  # 微信接收者的备注名或微信号
+    'smtp_max_retries': int(os.getenv('TRENDS_SMTP_MAX_RETRIES', '3')),
+    'smtp_retry_delay_seconds': int(os.getenv('TRENDS_SMTP_RETRY_DELAY_SECONDS', '15')),
+    'smtp_timeout_seconds': int(os.getenv('TRENDS_SMTP_TIMEOUT_SECONDS', '30')),
 }
 
 # Email Configuration
@@ -152,14 +155,19 @@ TRENDS_CONFIG = {
 RATE_LIMIT_CONFIG = {
     'max_retries': 3,
     'per_keyword_max_retries': 3,
-    'min_delay_between_queries': 10,  # 最小延迟10秒
-    'max_delay_between_queries': 20,  # 最大延迟20秒
-    'batch_size': 5,  # 每批处理的关键词数量
-    'batch_interval': 60,  # 批次间隔时间（秒）
+    'request_delay': float(os.getenv('TRENDS_REQUEST_DELAY', '2.0')),
+    'min_delay_between_queries': 20,  # 最小延迟20秒
+    'max_delay_between_queries': 35,  # 最大延迟35秒
+    'batch_size': 3,  # 每批处理的关键词数量
+    'batch_interval': 120,  # 批次间隔时间（秒）
     'quota_retry_min_wait': 90,  # API 配额超限后的最小等待时间（秒）
     'quota_retry_max_wait': 180,  # API 配额超限后的最大等待时间（秒）
     'empty_response_min_wait': 30,  # 空响应后的最小等待时间（秒）
     'empty_response_max_wait': 60,  # 空响应后的最大等待时间（秒）
+    'rate_limit_retry_min_wait': 180,  # 429/限流后的最小等待时间（秒）
+    'rate_limit_retry_max_wait': 420,  # 429/限流后的最大等待时间（秒）
+    'max_requests_per_min': 10,
+    'max_requests_per_hour': 80,
 }
 
 # Schedule Configuration
@@ -171,6 +179,8 @@ SCHEDULE_CONFIG = {
 # Monitoring Configuration
 MONITOR_CONFIG = {
     'rising_threshold': 500,  # 高增长趋势阈值
+    'alert_email_batch_size': 50,
+    'alert_email_delay_seconds': 8,
 }
 
 # Logging Configuration

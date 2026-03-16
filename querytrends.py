@@ -3,11 +3,35 @@ import pandas as pd
 import json
 import time
 import random
+import logging
 from datetime import datetime
 import requests
 from urllib.parse import quote
 import re
 from config import RATE_LIMIT_CONFIG
+
+def _build_trends_client():
+    request_delay = RATE_LIMIT_CONFIG.get('request_delay')
+
+    if request_delay is None:
+        return Trends(hl='zh-CN')
+
+    try:
+        return Trends(hl='zh-CN', request_delay=request_delay)
+    except TypeError:
+        logging.warning(
+            "Installed trendspy does not accept request_delay; falling back to default client"
+        )
+        return Trends(hl='zh-CN')
+
+def _is_rate_limit_error(error_msg):
+    lowered = error_msg.lower()
+    return (
+        "429" in lowered or
+        "too many requests" in lowered or
+        "google.com/sorry" in lowered or
+        "rate limit" in lowered
+    )
 
 def get_related_queries(keyword, geo='', timeframe='today 12-m'):
     """
@@ -16,7 +40,7 @@ def get_related_queries(keyword, geo='', timeframe='today 12-m'):
     max_retries = RATE_LIMIT_CONFIG['per_keyword_max_retries']
 
     for attempt in range(1, max_retries + 1):
-        tr = Trends(hl='zh-CN')
+        tr = _build_trends_client()
         
         # 随机化 User-Agent
         user_agents = [
@@ -73,6 +97,14 @@ def get_related_queries(keyword, geo='', timeframe='today 12-m'):
                     RATE_LIMIT_CONFIG['empty_response_max_wait']
                 )
                 reason = "请求返回为空"
+
+            # Google Trends 明确限流或返回 sorry 页面
+            elif _is_rate_limit_error(error_msg):
+                wait_time = random.uniform(
+                    RATE_LIMIT_CONFIG['rate_limit_retry_min_wait'],
+                    RATE_LIMIT_CONFIG['rate_limit_retry_max_wait']
+                )
+                reason = "Google Trends 限流"
                 
             # 其他错误则直接抛出
             else:
@@ -213,8 +245,8 @@ def main():
 class RequestLimiter:
     def __init__(self):
         self.requests = []  # 存储请求时间戳
-        self.max_requests_per_min = 30  # 每分钟最大请求数
-        self.max_requests_per_hour = 200  # 每小时最大请求数
+        self.max_requests_per_min = RATE_LIMIT_CONFIG['max_requests_per_min']
+        self.max_requests_per_hour = RATE_LIMIT_CONFIG['max_requests_per_hour']
         
     def can_make_request(self):
         """检查是否可以发起新请求"""

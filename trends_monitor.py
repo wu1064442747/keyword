@@ -55,14 +55,14 @@ def send_email(subject, body, attachments=None):
                 part['Content-Disposition'] = f'attachment; filename="{os.path.basename(filepath)}"'
                 msg.attach(part)
 
-        # Gmail使用SMTP然后升级到TLS
+        # 使用 SMTP 然后升级到 TLS
         with smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port']) as server:
             server.ehlo()  # 可以帮助识别连接问题
             server.starttls()  # 升级到TLS连接
             server.ehlo()  # 重新识别
-            logging.info("Attempting to login to Gmail...")
+            logging.info("Attempting SMTP login...")
             server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
-            logging.info("Login successful, sending email...")
+            logging.info("SMTP login successful, sending email...")
             server.send_message(msg)
             
         logging.info(f"Email sent successfully: {subject}")
@@ -265,8 +265,8 @@ def process_trends():
         
         # Send alerts for high rising trends
         if high_rising_trends:
-            # 将高趋势分批处理，每批最多10个趋势
-            batch_size = 10
+            # 将高趋势分批处理，单批大小由配置控制
+            batch_size = MONITOR_CONFIG['alert_email_batch_size']
             for i in range(0, len(high_rising_trends), batch_size):
                 batch_trends = high_rising_trends[i:i + batch_size]
                 batch_number = i // batch_size + 1
@@ -310,7 +310,7 @@ def process_trends():
                     logging.warning(f"Failed to send alert notification for batch {batch_number}, but data collection completed")
                 
                 # 添加短暂延迟，避免消息发送过快
-                time.sleep(2)
+                time.sleep(MONITOR_CONFIG['alert_email_delay_seconds'])
         
         logging.info("Daily trends processing completed successfully")
         return True

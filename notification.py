@@ -34,36 +34,63 @@ class NotificationManager:
 
     def _send_email(self, subject, body, attachments=None):
         """发送邮件通知"""
-        try:
-            msg = MIMEMultipart()
-            msg['From'] = EMAIL_CONFIG['sender_email']
-            msg['To'] = EMAIL_CONFIG['recipient_email']
-            msg['Subject'] = subject
+        max_retries = NOTIFICATION_CONFIG['smtp_max_retries']
+        retry_delay = NOTIFICATION_CONFIG['smtp_retry_delay_seconds']
+        timeout = NOTIFICATION_CONFIG['smtp_timeout_seconds']
 
-            msg.attach(MIMEText(body, 'html'))
+        for attempt in range(1, max_retries + 1):
+            try:
+                msg = MIMEMultipart()
+                msg['From'] = EMAIL_CONFIG['sender_email']
+                msg['To'] = EMAIL_CONFIG['recipient_email']
+                msg['Subject'] = subject
 
-            if attachments:
-                for filepath in attachments:
-                    with open(filepath, 'rb') as f:
-                        part = MIMEApplication(f.read(), Name=os.path.basename(filepath))
-                    part['Content-Disposition'] = f'attachment; filename="{os.path.basename(filepath)}"'
-                    msg.attach(part)
+                msg.attach(MIMEText(body, 'html'))
 
-            with smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port']) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                logging.info("Attempting to login to Gmail...")
-                server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
-                logging.info("Login successful, sending email...")
-                server.send_message(msg)
-                
-            logging.info(f"Email sent successfully: {subject}")
-            return True
-        except Exception as e:
-            logging.error(f"Failed to send email: {str(e)}")
-            logging.error(f"Email configuration used: server={EMAIL_CONFIG['smtp_server']}, port={EMAIL_CONFIG['smtp_port']}")
-            return False
+                if attachments:
+                    for filepath in attachments:
+                        with open(filepath, 'rb') as f:
+                            part = MIMEApplication(f.read(), Name=os.path.basename(filepath))
+                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(filepath)}"'
+                        msg.attach(part)
+
+                with smtplib.SMTP(
+                    EMAIL_CONFIG['smtp_server'],
+                    EMAIL_CONFIG['smtp_port'],
+                    timeout=timeout
+                ) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    logging.info(
+                        "Attempting SMTP login (attempt %s/%s)...",
+                        attempt,
+                        max_retries
+                    )
+                    server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
+                    logging.info("SMTP login successful, sending email...")
+                    server.send_message(msg)
+
+                logging.info(f"Email sent successfully: {subject}")
+                return True
+            except Exception as e:
+                logging.error(f"Failed to send email: {str(e)}")
+                logging.error(
+                    "Email configuration used: server=%s, port=%s",
+                    EMAIL_CONFIG['smtp_server'],
+                    EMAIL_CONFIG['smtp_port']
+                )
+
+                if attempt >= max_retries:
+                    return False
+
+                logging.warning(
+                    "Retrying email send in %s seconds (attempt %s/%s)...",
+                    retry_delay,
+                    attempt + 1,
+                    max_retries
+                )
+                time.sleep(retry_delay)
 
     def _format_wechat_message(self, subject, body, report_data=None):
         """格式化微信消息内容"""
